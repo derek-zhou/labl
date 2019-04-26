@@ -5,8 +5,10 @@
 use strict;
 use warnings;
 use v5.14;
+use Cwd qw(getcwd abs_path);
 
-our $labl_dir;
+our $root_dir;
+our $cwd;
 
 sub do_help {
     print <<EOT
@@ -28,19 +30,43 @@ usage:
 EOT
 }
 
-sub do_list {
-    opendir(my $dh, $labl_dir) || die "Can't opendir $labl_dir: $!";
+sub all_labels {
+    my @labels;
+    opendir(my $dh, "$root_dir/.labl") || die "Can't opendir $root_dir/.labl: $!";
     while (readdir $dh) {
-	print "$_\n" unless (/^\./);
+	push @labels, $_ unless (/^\./);
     }
     closedir $dh;
+    return @labels;
 }
 
-sub find_label_dir {
-    chomp(my $wd = `pwd`);
+sub all_labeled {
+    my @links;
+    my $label = shift;
+    chdir("$root_dir/.labl/$label");
+    opendir(my $dh, ".") || die "Can't opendir $root_dir/.labl/$label: $!";
+    while (readdir $dh) {
+	# all links start with "../../"
+	push @links, substr(readlink($_), 6) unless (/^\./);
+    }
+    closedir $dh;
+    chdir($cwd);
+    return @links;
+}
+
+sub do_list {
+    my @labels = all_labels();
+    foreach (@labels) {
+	say $_;
+    }
+}
+
+# find the project root dir
+sub find_root_dir {
+    $cwd = getcwd();
     my $found_dir;
     while(1) {
-	chomp(my $cwd = `pwd`);
+	my $cwd = getcwd();
 	if (-d '.labl') {
 	    $found_dir = $cwd;
 	    last;
@@ -55,9 +81,41 @@ sub find_label_dir {
 	}
 	last unless(chdir(".."));
     }
-    chdir($wd);
-    return "$found_dir/.labl" if ($found_dir);
+    chdir($cwd);
+    return $found_dir if ($found_dir);
     return 0;
+}
+
+# find the relative file name from root of the project
+sub rel_name_from_root {
+    # root_dir must be a prefix of the name
+    my $name = abs_path(shift);
+    return substr($name, length($root_dir)+1);
+}
+
+sub do_show {
+    my %name_map;
+    my %name_abs_map;
+    foreach (@_) {
+	$name_map{$_} = [];
+	$name_abs_map{$_} = rel_name_from_root($_);
+    }
+    foreach my $label (all_labels()) {
+	foreach my $link (all_labeled($label)) {
+	    foreach my $file (@_) {
+		if ($link eq $name_abs_map{$file}) {
+		    push @{$name_map{$file}}, $label;
+		}
+	    }
+	}
+    }
+    foreach my $file (@_) {
+	if (scalar(@{$name_map{$file}})) {
+	    my $labels = join(" ",@{$name_map{$file}});
+	    say "$file:";
+	    say $labels;
+	}
+    }
 }
 
 die "Usage: $0 command ...\n" if (scalar(@ARGV)<1);
@@ -69,7 +127,7 @@ for ($command) {
 	do_help();
 	last;
     }
-    die "Cannot find .labl dir" unless (($labl_dir = find_label_dir()));
+    die "Cannot find project root dir" unless (($root_dir = find_root_dir()));
     if ($_ eq "list") {
 	do_list();
 	last;
@@ -77,7 +135,7 @@ for ($command) {
     die "Usage: $0 $command files \n" if (scalar(@ARGV)<1);
     # the next 3 commands operate on files only
     if ($_ eq "show") {
-	# do_show(@ARGV);
+	do_show(@ARGV);
 	last;
     }
     if ($_ eq "rm") {
