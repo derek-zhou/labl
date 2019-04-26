@@ -37,10 +37,10 @@ sub do_list {
 }
 
 sub find_label_dir {
-    my $wd = `pwd`;
+    chomp(my $wd = `pwd`);
     my $found_dir;
     while(1) {
-	my $cwd = `pwd`;
+	chomp(my $cwd = `pwd`);
 	if (-d '.labl') {
 	    $found_dir = $cwd;
 	    last;
@@ -56,10 +56,7 @@ sub find_label_dir {
 	last unless(chdir(".."));
     }
     chdir($wd);
-    if ($found_dir) {
-	chomp $found_dir;
-	return "$found_dir/.labl";
-    }
+    return "$found_dir/.labl" if ($found_dir);
     return 0;
 }
 
