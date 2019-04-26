@@ -1,0 +1,110 @@
+#! /usr/bin/perl -w
+#
+# labl: main labl script
+
+use strict;
+use warnings;
+use v5.14;
+
+our $labl_dir;
+
+sub do_help {
+    print <<EOT
+usage:
+    labl COMMAND [LABEL] files
+
+    labl is a tool to manage labels on files
+
+    Valid commands include:
+    help                print this help text
+    list                list all existing labels
+    show FILES          show labels associated with each file
+    rm FILES            rm FILES, fix labels
+    mv FILES DEST       mv FILES to DEST which must be a dir, fix labels
+    mv SRC DEST         rename SRC to DEST, fix labels
+    add LABEL FILES     add LABEL to FILES
+    drop LABEL FILES    drop LABEL from FILES
+    grep LABEL FILES    filter FILES down to those labeled with LABEL
+EOT
+}
+
+sub do_list {
+    opendir(my $dh, $labl_dir) || die "Can't opendir $labl_dir: $!";
+    while (readdir $dh) {
+	print "$_\n" unless (/^\./);
+    }
+    closedir $dh;
+}
+
+sub find_label_dir {
+    my $wd = `pwd`;
+    my $found_dir;
+    while(1) {
+	my $cwd = `pwd`;
+	if (-d '.labl') {
+	    $found_dir = $cwd;
+	    last;
+	}
+	if (-d '.git') {
+	    if (mkdir(".labl")) {
+		$found_dir = $cwd;
+		last;
+	    } else {
+		last;
+	    }
+	}
+	last unless(chdir(".."));
+    }
+    chdir($wd);
+    if ($found_dir) {
+	chomp $found_dir;
+	return "$found_dir/.labl";
+    }
+    return 0;
+}
+
+die "Usage: $0 command ...\n" if (scalar(@ARGV)<1);
+my $command = shift(@ARGV);
+
+for ($command) {
+    # the first 2 commands has no argument
+    if ($_ eq "help") {
+	do_help();
+	last;
+    }
+    die "Cannot find .labl dir" unless (($labl_dir = find_label_dir()));
+    if ($_ eq "list") {
+	do_list();
+	last;
+    }
+    die "Usage: $0 $command files \n" if (scalar(@ARGV)<1);
+    # the next 3 commands operate on files only
+    if ($_ eq "show") {
+	# do_show(@ARGV);
+	last;
+    }
+    if ($_ eq "rm") {
+	# do_rm(@ARGV);
+	last;
+    }
+    if ($_ eq "mv") {
+	# do_mv(@ARGV);
+	last;
+    }
+    # the next 3 commands operate on a LABEL and files
+    my $label = shift(@ARGV);
+    die "Usage: $0 $command $label files \n" if (scalar(@ARGV)<1);
+    if ($_ eq "add") {
+	# do_add($label, @ARGV);
+	last;
+    }
+    if ($_ eq "drop") {
+	# do_drop($label, @ARGV);
+	last;
+    }
+    if ($_ eq "grep") {
+	# do_grep($label, @ARGV);
+	last;
+    }
+    die "Unknown command: $command\n";
+}
