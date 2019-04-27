@@ -32,26 +32,32 @@ EOT
 
 sub all_labels {
     my @labels;
-    opendir(my $dh, "$root_dir/.labl") || die "Can't opendir $root_dir/.labl: $!";
+    opendir(my $dh, "$root_dir/.labl") or
+	die "Can't opendir $root_dir/.labl: $!";
     while (readdir $dh) {
 	push @labels, $_ unless (/^\./);
     }
     closedir $dh;
-    return @labels;
+    return \@labels;
 }
 
 sub all_labeled {
-    my @links;
+    my %links;
     my $label = shift;
     chdir("$root_dir/.labl/$label");
-    opendir(my $dh, ".") || die "Can't opendir $root_dir/.labl/$label: $!";
+    opendir(my $dh, ".") or
+	die "Can't opendir $root_dir/.labl/$label: $!";
     while (readdir $dh) {
-	# all links start with "../../"
-	push @links, substr(readlink($_), 6) unless (/^\./);
+	unless (/^\./) {
+	    my $link = readlink($_);
+	    defined($link) or die "readlink fail: $!";
+	    # all links start with "../../"
+	    $links{substr($link, 6)} = $_;
+	}
     }
     closedir $dh;
     chdir($cwd);
-    return @links;
+    return \%links;
 }
 
 sub do_list {
@@ -95,27 +101,150 @@ sub rel_name_from_root {
 
 sub do_show {
     my %name_map;
-    my %name_abs_map;
+    my %name_canon_map;
+    my @canons;
     foreach (@_) {
-	$name_map{$_} = [];
-	$name_abs_map{$_} = rel_name_from_root($_);
+	my $canon_name = rel_name_from_root($_);
+	push @canons, $canon_name;
+	$name_map{$canon_name} = [];
+	$name_canon_map{$_} = $canon_name;
     }
-    foreach my $label (all_labels()) {
-	foreach my $link (all_labeled($label)) {
-	    foreach my $file (@_) {
-		if ($link eq $name_abs_map{$file}) {
-		    push @{$name_map{$file}}, $label;
-		}
-	    }
+    foreach my $label (@{all_labels()}) {
+	my $label_map = all_labeled($label);
+	foreach my $canon (@canons) {
+	    next unless (exists($label_map->{$canon}));
+	    push @{$name_map{$canon}}, $label;
 	}
     }
-    foreach my $file (@_) {
-	if (scalar(@{$name_map{$file}})) {
-	    my $labels = join(" ",@{$name_map{$file}});
-	    say "$file:";
+    foreach (@_) {
+	my $canon_name = $name_canon_map{$_};
+	if (scalar(@{$name_map{$canon_name}})) {
+	    my $labels = join(" ",@{$name_map{$canon_name}});
+	    say "$_:";
 	    say $labels;
 	}
     }
+}
+
+sub do_rm {
+    my @canons = map(rel_name_from_root($_), @_);
+    foreach my $label (@{all_labels()}) {
+	my $label_map = all_labeled($label);
+	foreach my $canon (@canons) {
+	    next unless (exists($label_map->{$canon}));
+	    unlink("$root_dir/.labl/$label/".$label_map->{$canon}) or
+		die "cannot unlink: $!";
+	}
+    }
+    foreach (@_) {
+	unlink($_);
+    }
+}
+
+sub do_mv {
+    my $dest = pop;
+    my %mv_map;
+    # is it a dir
+    if (substr($dest, -1) eq "/") {
+	foreach (@_) {
+	    my $l = rindex($_, "/");
+	    my $basename = ($l >= 0) ? substr($_, $l + 1) : $_;
+	    $mv_map{$_} = $dest . $basename;
+	}
+    } else {
+	die "mv of more than one file require an dir at last"
+	    unless (scalar(@_) == 1);
+	$mv_map{shift} = $dest;
+    }
+    return do_real_mv(\%mv_map);
+}
+
+sub do_real_mv {
+    my $mv_map = shift;
+    my %canon_mv_map;
+    foreach (keys(%{$mv_map})) {
+	$canon_mv_map{rel_name_from_root($_)} =
+	    rel_name_from_root($mv_map->{$_});
+	rename($_, $mv_map->{$_}) or
+	    die "cannot rename: $!";
+    }
+    my @canons = keys(%canon_mv_map);
+    foreach my $label (@{all_labels()}) {
+	my $label_map = all_labeled($label);
+	chdir("$root_dir/.labl/$label") or
+	    die "cannot chdir: $!";
+	foreach my $canon (@canons) {
+	    next unless (exists($label_map->{$canon}));
+	    unlink($label_map->{$canon});
+	    my $new_canon = $canon_mv_map{$canon};
+	    my $last_slash = rindex($new_canon, "/");
+	    my $basename = ($last_slash >= 0) ?
+		substr($new_canon, $last_slash + 1)
+		: $new_canon;
+	    symlink("../../" . $new_canon, $basename) or
+		die "cannot symlink: $!";
+	}
+	chdir($cwd);
+    }
+}
+
+sub do_add {
+    my $label = shift;
+    my @canons = map(rel_name_from_root($_), @_);
+    unless (-e "$root_dir/.labl/$label") {
+	mkdir "$root_dir/.labl/$label" or
+	    die "cannot mkdir: $!";
+    }
+    chdir("$root_dir/.labl/$label") or
+	die "cannot chdir: $!";
+    foreach (@canons) {
+	my $l = rindex($_, "/");
+	my $basename = ($l >= 0) ? substr($_, $l + 1) : $_;
+	if (-e $basename) {
+	    say STDERR "the file $basename already exist in $root_dir/.labl/$label";
+	    next;
+	}
+	symlink("../../" . $_, $basename) or die "cannot symlink: $!";
+    }
+    chdir($cwd);
+}
+
+sub do_drop {
+    my $label = shift;
+    my @canons = map(rel_name_from_root($_), @_);
+    chdir("$root_dir/.labl/$label") or
+	die "cannot chdir: $!";
+    foreach (@canons) {
+	my $l = rindex($_, "/");
+	my $basename = ($l >= 0) ? substr($_, $l + 1) : $_;
+	unless (-e $basename) {
+	    say STDERR "the file $basename already gone in $root_dir/.labl/$label";
+	    next;
+	}
+	unlink($basename) or
+	    die "cannot unlink: $!";
+    }
+    chdir($cwd);
+}
+
+sub do_grep {
+    my $label = shift;
+    my @canons = map(rel_name_from_root($_), @_);
+    chdir("$root_dir/.labl/$label") or
+	die "cannot chdir: $!";
+    foreach (@canons) {
+	my $l = rindex($_, "/");
+	my $basename = ($l >= 0) ? substr($_, $l + 1) : $_;
+	next unless (-e $basename);
+	my $link = readlink($basename);
+	defined($link) or die "readlink fail: $!";
+	if ($link ne ("../../" . $_)) {
+	    say STDERR "the file $basename in $root_dir/.labl/$label is incorrect";
+	} else {
+	    say $_;
+	}
+    }
+    chdir($cwd);
 }
 
 die "Usage: $0 command ...\n" if (scalar(@ARGV)<1);
@@ -139,26 +268,28 @@ for ($command) {
 	last;
     }
     if ($_ eq "rm") {
-	# do_rm(@ARGV);
+	do_rm(@ARGV);
 	last;
     }
     if ($_ eq "mv") {
-	# do_mv(@ARGV);
+	do_mv(@ARGV);
 	last;
     }
     # the next 3 commands operate on a LABEL and files
     my $label = shift(@ARGV);
-    die "Usage: $0 $command $label files \n" if (scalar(@ARGV)<1);
+    die "Usage: $0 $command $label files\n" if (scalar(@ARGV)<1);
     if ($_ eq "add") {
-	# do_add($label, @ARGV);
+	do_add($label, @ARGV);
 	last;
     }
+    die "$label is not a valid label\n"
+	unless (-d ($root_dir . "/.labl/" . $label));
     if ($_ eq "drop") {
-	# do_drop($label, @ARGV);
+	do_drop($label, @ARGV);
 	last;
     }
     if ($_ eq "grep") {
-	# do_grep($label, @ARGV);
+	do_grep($label, @ARGV);
 	last;
     }
     die "Unknown command: $command\n";
