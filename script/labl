@@ -232,16 +232,17 @@ sub do_grep {
     my @canons = map(rel_name_from_root($_), @_);
     chdir("$root_dir/.labl/$label") or
 	die "cannot chdir: $!";
-    foreach (@canons) {
-	my $l = rindex($_, "/");
-	my $basename = ($l >= 0) ? substr($_, $l + 1) : $_;
+    for (my $i = 0; $i < scalar(@_); $i++) {
+	my $canon = $canons[$i];
+	my $l = rindex($canon, "/");
+	my $basename = ($l >= 0) ? substr($canon, $l + 1) : $canon;
 	next unless (-e $basename);
 	my $link = readlink($basename);
 	defined($link) or die "readlink fail: $!";
-	if ($link ne ("../../" . $_)) {
+	if ($link ne ("../../" . $canon)) {
 	    say STDERR "the file $basename in $root_dir/.labl/$label is incorrect";
 	} else {
-	    say $_;
+	    say $_[$i];
 	}
     }
     chdir($cwd);
