@@ -61,8 +61,7 @@ sub all_labeled {
 }
 
 sub do_list {
-    my @labels = all_labels();
-    foreach (@labels) {
+    foreach (@{all_labels()}) {
 	say $_;
     }
 }
@@ -73,6 +72,8 @@ sub find_root_dir {
     my $found_dir;
     while(1) {
 	my $cwd = getcwd();
+	# root is not allowed
+	last if ($cwd eq "/");
 	if (-d '.labl') {
 	    $found_dir = $cwd;
 	    last;
@@ -154,7 +155,7 @@ sub do_mv {
     } else {
 	die "mv of more than one file require an dir at last"
 	    unless (scalar(@_) == 1);
-	$mv_map{shift} = $dest;
+	$mv_map{shift(@_)} = $dest;
     }
     return do_real_mv(\%mv_map);
 }
