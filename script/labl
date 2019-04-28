@@ -2,13 +2,9 @@
 #
 # labl: main labl script
 
-use strict;
-use warnings;
-use v5.14;
-use Cwd qw(getcwd abs_path);
-
-our $root_dir;
-our $cwd;
+use Mojo::Base -strict;
+use lib ".";
+use Labl;
 
 sub do_help {
     print <<EOT
@@ -30,88 +26,26 @@ usage:
 EOT
 }
 
-sub all_labels {
-    my @labels;
-    opendir(my $dh, "$root_dir/.labl") or
-	die "Can't opendir $root_dir/.labl: $!";
-    while (readdir $dh) {
-	push @labels, $_ unless (/^\./);
-    }
-    closedir $dh;
-    return \@labels;
-}
-
-sub all_labeled {
-    my %links;
-    my $label = shift;
-    chdir("$root_dir/.labl/$label");
-    opendir(my $dh, ".") or
-	die "Can't opendir $root_dir/.labl/$label: $!";
-    while (readdir $dh) {
-	unless (/^\./) {
-	    my $link = readlink($_);
-	    defined($link) or die "readlink fail: $!";
-	    # all links start with "../../"
-	    $links{substr($link, 6)} = $_;
-	}
-    }
-    closedir $dh;
-    chdir($cwd);
-    return \%links;
-}
-
 sub do_list {
-    foreach (@{all_labels()}) {
+    my $labl = shift;
+    foreach (@{$labl->all_labels}) {
 	say $_;
     }
 }
 
-# find the project root dir
-sub find_root_dir {
-    $cwd = getcwd();
-    my $found_dir;
-    while(1) {
-	my $cwd = getcwd();
-	# root is not allowed
-	last if ($cwd eq "/");
-	if (-d '.labl') {
-	    $found_dir = $cwd;
-	    last;
-	}
-	if (-d '.git') {
-	    if (mkdir(".labl")) {
-		$found_dir = $cwd;
-		last;
-	    } else {
-		last;
-	    }
-	}
-	last unless(chdir(".."));
-    }
-    chdir($cwd);
-    return $found_dir if ($found_dir);
-    return 0;
-}
-
-# find the relative file name from root of the project
-sub rel_name_from_root {
-    # root_dir must be a prefix of the name
-    my $name = abs_path(shift);
-    return substr($name, length($root_dir)+1);
-}
-
 sub do_show {
+    my $labl = shift;
     my %name_map;
     my %name_canon_map;
     my @canons;
     foreach (@_) {
-	my $canon_name = rel_name_from_root($_);
+	my $canon_name = $labl->canon_of($_);
 	push @canons, $canon_name;
 	$name_map{$canon_name} = [];
 	$name_canon_map{$_} = $canon_name;
     }
-    foreach my $label (@{all_labels()}) {
-	my $label_map = all_labeled($label);
+    foreach my $label (@{$labl->all_labels}) {
+	my $label_map = $labl->all_labeled_with($label);
 	foreach my $canon (@canons) {
 	    next unless (exists($label_map->{$canon}));
 	    push @{$name_map{$canon}}, $label;
@@ -128,14 +62,11 @@ sub do_show {
 }
 
 sub do_rm {
-    my @canons = map(rel_name_from_root($_), @_);
-    foreach my $label (@{all_labels()}) {
-	my $label_map = all_labeled($label);
-	foreach my $canon (@canons) {
-	    next unless (exists($label_map->{$canon}));
-	    unlink("$root_dir/.labl/$label/".$label_map->{$canon}) or
-		die "cannot unlink: $!";
-	}
+    my $labl = shift;
+    my @canons = map($labl->canon_of($_), @_);
+    my @labels = @{$labl->all_labels};
+    foreach my $label (@labels) {
+	$labl->drop_all_with($label, @canons);
     }
     foreach (@_) {
 	unlink($_);
@@ -143,6 +74,7 @@ sub do_rm {
 }
 
 sub do_mv {
+    my $labl = shift;
     my $dest = pop;
     my %mv_map;
     # is it a dir
@@ -157,142 +89,91 @@ sub do_mv {
 	    unless (scalar(@_) == 1);
 	$mv_map{shift(@_)} = $dest;
     }
-    return do_real_mv(\%mv_map);
+    return do_real_mv($labl, \%mv_map);
 }
 
 sub do_real_mv {
-    my $mv_map = shift;
+    my ($labl, $mv_map) = @_;
     my %canon_mv_map;
     foreach (keys(%{$mv_map})) {
-	$canon_mv_map{rel_name_from_root($_)} =
-	    rel_name_from_root($mv_map->{$_});
+	$canon_mv_map{$labl->canon_of($_)} = $labl->canon_of($mv_map->{$_});
 	rename($_, $mv_map->{$_}) or
 	    die "cannot rename: $!";
     }
     my @canons = keys(%canon_mv_map);
-    foreach my $label (@{all_labels()}) {
-	my $label_map = all_labeled($label);
-	chdir("$root_dir/.labl/$label") or
-	    die "cannot chdir: $!";
+    foreach my $label (@{$labl->all_labels}) {
 	foreach my $canon (@canons) {
-	    next unless (exists($label_map->{$canon}));
-	    unlink($label_map->{$canon});
-	    my $new_canon = $canon_mv_map{$canon};
-	    my $last_slash = rindex($new_canon, "/");
-	    my $basename = ($last_slash >= 0) ?
-		substr($new_canon, $last_slash + 1)
-		: $new_canon;
-	    symlink("../../" . $new_canon, $basename) or
-		die "cannot symlink: $!";
+	    $labl->rename_with($label, $canon, $canon_mv_map{$canon});
 	}
-	chdir($cwd);
     }
 }
 
 sub do_add {
+    my $labl = shift;
     my $label = shift;
-    my @canons = map(rel_name_from_root($_), @_);
-    unless (-e "$root_dir/.labl/$label") {
-	mkdir "$root_dir/.labl/$label" or
-	    die "cannot mkdir: $!";
-    }
-    chdir("$root_dir/.labl/$label") or
-	die "cannot chdir: $!";
-    foreach (@canons) {
-	my $l = rindex($_, "/");
-	my $basename = ($l >= 0) ? substr($_, $l + 1) : $_;
-	if (-e $basename) {
-	    say STDERR "the file $basename already exist in $root_dir/.labl/$label";
-	    next;
-	}
-	symlink("../../" . $_, $basename) or die "cannot symlink: $!";
-    }
-    chdir($cwd);
+    my @canons = map($labl->canon_of($_), @_);
+    $labl->add_all_with($label, @canons);
 }
 
 sub do_drop {
+    my $labl = shift;
     my $label = shift;
-    my @canons = map(rel_name_from_root($_), @_);
-    chdir("$root_dir/.labl/$label") or
-	die "cannot chdir: $!";
-    foreach (@canons) {
-	my $l = rindex($_, "/");
-	my $basename = ($l >= 0) ? substr($_, $l + 1) : $_;
-	unless (-e $basename) {
-	    say STDERR "the file $basename already gone in $root_dir/.labl/$label";
-	    next;
-	}
-	unlink($basename) or
-	    die "cannot unlink: $!";
-    }
-    chdir($cwd);
+    my @canons = map($labl->canon_of($_), @_);
+    $labl->drop_all_with($label, @canons);
 }
 
 sub do_grep {
+    my $labl = shift;
     my $label = shift;
-    my @canons = map(rel_name_from_root($_), @_);
-    chdir("$root_dir/.labl/$label") or
-	die "cannot chdir: $!";
+    my @canons = map($labl->canon_of($_), @_);
     for (my $i = 0; $i < scalar(@_); $i++) {
-	my $canon = $canons[$i];
-	my $l = rindex($canon, "/");
-	my $basename = ($l >= 0) ? substr($canon, $l + 1) : $canon;
-	next unless (-e $basename);
-	my $link = readlink($basename);
-	defined($link) or die "readlink fail: $!";
-	if ($link ne ("../../" . $canon)) {
-	    say STDERR "the file $basename in $root_dir/.labl/$label is incorrect";
-	} else {
-	    say $_[$i];
-	}
+	say $_[$i] if ($labl->is_labeled_with($label, $canons[$i]));
     }
-    chdir($cwd);
 }
 
 die "Usage: $0 command ...\n" if (scalar(@ARGV)<1);
 my $command = shift(@ARGV);
 
-for ($command) {
+ SWITCH: {
     # the first 2 commands has no argument
-    if ($_ eq "help") {
+    if ($command eq "help") {
 	do_help();
-	last;
+	last SWITCH;
     }
-    die "Cannot find project root dir" unless (($root_dir = find_root_dir()));
-    if ($_ eq "list") {
-	do_list();
-	last;
+    my $labl = Labl->new->init;
+    if ($command eq "list") {
+	do_list($labl);
+	last SWITCH;
     }
     die "Usage: $0 $command files \n" if (scalar(@ARGV)<1);
     # the next 3 commands operate on files only
-    if ($_ eq "show") {
-	do_show(@ARGV);
-	last;
+    if ($command eq "show") {
+	do_show($labl, @ARGV);
+	last SWITCH;
     }
-    if ($_ eq "rm") {
-	do_rm(@ARGV);
-	last;
+    if ($command eq "rm") {
+	do_rm($labl, @ARGV);
+	last SWITCH;
     }
-    if ($_ eq "mv") {
-	do_mv(@ARGV);
-	last;
+    if ($command eq "mv") {
+	do_mv($labl, @ARGV);
+	last SWITCH;
     }
     # the next 3 commands operate on a LABEL and files
     my $label = shift(@ARGV);
     die "Usage: $0 $command $label files\n" if (scalar(@ARGV)<1);
-    if ($_ eq "add") {
-	do_add($label, @ARGV);
-	last;
+    if ($command eq "add") {
+	do_add($labl, $label, @ARGV);
+	last SWITCH;
     }
-    die "$label is not a valid label\n"
-	unless (-d ($root_dir . "/.labl/" . $label));
-    if ($_ eq "drop") {
-	do_drop($label, @ARGV);
-	last;
+    die "$label is not a valid label\n" unless ($labl->has_label($label));
+    if ($command eq "drop") {
+	do_drop($labl, $label, @ARGV);
+	last SWITCH;
     }
-    if ($_ eq "grep") {
-	do_grep($label, @ARGV);
-	last;
+    if ($command eq "grep") {
+	do_grep($labl, $label, @ARGV);
+	last SWITCH;
     }
     die "Unknown command: $command\n";
 }
