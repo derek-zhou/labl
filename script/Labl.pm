@@ -2,22 +2,7 @@ package Labl;
 use Mojo::Base -base;
 use Cwd qw(getcwd abs_path);
 
-has 'root_dir';
-has 'cwd';
-has '_label_map_cache';
-has 'all_labels' => sub {
-    my $self = shift;
-    my @labels;
-    my $labl_dir = $self->root_dir . "/.labl";
-    opendir(my $dh, $labl_dir) or die "Can't opendir $labl_dir: $!";
-    while (readdir $dh) {
-	push @labels, $_ unless (/^\./);
-    }
-    closedir $dh;
-    # for future use
-    $self->all_labels(\@labels);
-    return \@labels;
-};
+has ['root_dir', 'cwd', 'all_labels', '_label_map_cache'];
 
 sub add_label {
     my ($self, $label) = @_;
@@ -44,8 +29,7 @@ sub drop_label {
 
 sub has_label {
     my ($self, $label) = @_;
-    my @all_labels = @{$self->all_labels};
-    foreach (@all_labels) {
+    foreach (@{$self->all_labels}) {
 	return 1 if ($_ eq $label);
     }
     return 0;
@@ -64,12 +48,8 @@ sub init {
 	    last;
 	}
 	if (-d '.git') {
-	    if (mkdir(".labl")) {
-		$found_dir = $cwd;
-		last;
-	    } else {
-		last;
-	    }
+	    $found_dir = $cwd if (mkdir(".labl"));
+	    last;
 	}
 	last unless(chdir(".."));
     }
@@ -77,6 +57,11 @@ sub init {
     die "Cannot find project root dir" unless ($found_dir);
     $self->root_dir($found_dir);
     $self->_label_map_cache({});
+    opendir(my $dh, ($found_dir . "/.labl")) or
+	die "Can't open label dir: $!";
+    my @labels = grep(!/^\./, readdir($dh));
+    closedir $dh;
+    $self->all_labels(\@labels);
     return $self;
 }
 

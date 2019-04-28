@@ -35,28 +35,19 @@ sub do_list {
 
 sub do_show {
     my $labl = shift;
-    my %name_map;
-    my %name_canon_map;
-    my @canons;
-    foreach (@_) {
-	my $canon_name = $labl->canon_of($_);
-	push @canons, $canon_name;
-	$name_map{$canon_name} = [];
-	$name_canon_map{$_} = $canon_name;
-    }
+    my @canons = map($labl->canon_of($_), @_);
+    my %name_map = map{ $_ => [] } @canons;
     foreach my $label (@{$labl->all_labels}) {
-	my $label_map = $labl->all_labeled_with($label);
 	foreach my $canon (@canons) {
-	    next unless (exists($label_map->{$canon}));
-	    push @{$name_map{$canon}}, $label;
+	    push @{$name_map{$canon}}, $label
+		if ($labl->is_labeled_with($label, $canon));
 	}
     }
-    foreach (@_) {
-	my $canon_name = $name_canon_map{$_};
-	if (scalar(@{$name_map{$canon_name}})) {
-	    my $labels = join(" ",@{$name_map{$canon_name}});
-	    say "$_:";
-	    say $labels;
+    for (my $i = 0; $i < scalar(@_); $i++) {
+	my $canon = $canons[$i];
+	if (scalar(@{$name_map{$canon}})) {
+	    say $_[$i] . ":";
+	    say join(" ", @{$name_map{$canon}});
 	}
     }
 }
@@ -133,7 +124,6 @@ sub do_grep {
 
 die "Usage: $0 command ...\n" if (scalar(@ARGV)<1);
 my $command = shift(@ARGV);
-
  SWITCH: {
     # the first 2 commands has no argument
     if ($command eq "help") {
@@ -145,33 +135,40 @@ my $command = shift(@ARGV);
 	do_list($labl);
 	last SWITCH;
     }
-    die "Usage: $0 $command files \n" if (scalar(@ARGV)<1);
     # the next 3 commands operate on files only
     if ($command eq "show") {
+	die "Usage: $0 $command files\n" if (scalar(@ARGV)<1);
 	do_show($labl, @ARGV);
 	last SWITCH;
     }
     if ($command eq "rm") {
+	die "Usage: $0 $command files\n" if (scalar(@ARGV)<1);
 	do_rm($labl, @ARGV);
 	last SWITCH;
     }
     if ($command eq "mv") {
+	die "Usage: $0 $command files\n" if (scalar(@ARGV)<2);
 	do_mv($labl, @ARGV);
 	last SWITCH;
     }
     # the next 3 commands operate on a LABEL and files
     my $label = shift(@ARGV);
-    die "Usage: $0 $command $label files\n" if (scalar(@ARGV)<1);
     if ($command eq "add") {
+	die "Usage: $0 $command label files\n" if (scalar(@ARGV)<1);
 	do_add($labl, $label, @ARGV);
 	last SWITCH;
     }
-    die "$label is not a valid label\n" unless ($labl->has_label($label));
     if ($command eq "drop") {
+	die "Usage: $0 $command label files\n" if (scalar(@ARGV)<1);
+	die "Error: $label is not a valid label\n"
+	    unless ($labl->has_label($label));
 	do_drop($labl, $label, @ARGV);
 	last SWITCH;
     }
     if ($command eq "grep") {
+	die "Usage: $0 $command label files\n" if (scalar(@ARGV)<1);
+	die "Error: $label is not a valid label\n"
+	    unless ($labl->has_label($label));
 	do_grep($labl, $label, @ARGV);
 	last SWITCH;
     }
