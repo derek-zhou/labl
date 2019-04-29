@@ -82,7 +82,7 @@ sub all_labeled_with {
     chdir($self->root_dir . "/.labl/$label") or
 	die "cannot chdir: $!";
     opendir(my $dh, ".") or die "Can't open label $label: $!";
-    while (readdir $dh) {
+    foreach (readdir($dh)) {
 	unless (/^\./) {
 	    my $link = readlink($_);
 	    defined($link) or die "readlink $_ in $label fail: $!";
@@ -148,6 +148,11 @@ sub rename_with {
 sub is_labeled_with {
     my ($self, $label, $file) = @_;
     return exists($self->all_labeled_with($label)->{$file});
+}
+
+sub all_labels_of {
+    my ($self, $file) = @_;
+    return grep {exists($self->all_labeled_with($_)->{$file})} @{$self->all_labels};
 }
 
 1;
