@@ -3,7 +3,6 @@
 # labl: main labl script
 
 use Mojo::Base -strict;
-use lib ".";
 use Labl;
 
 sub do_help {
