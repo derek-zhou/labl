@@ -96,6 +96,35 @@ sub has_label {
     return 0;
 }
 
+sub get_link_name {
+    my $canon = shift;
+    my @tokens = reverse(split(/\//, $canon));
+    my $name = $tokens[0];
+    my $i = 1;
+    while (-e $name) {
+	die "The $canon cannot be linked!" if ($i == scalar(@tokens));
+	$name = $name . ',' . $tokens[$i];
+	$i++;
+    }
+    return $name;
+}
+
+sub remove_link {
+    my ($to_be_remove, $label_map) = @_;
+    my $old_link = $label_map->{$to_be_remove};
+    unlink($old_link) or die "cannot unlink: $!";
+    delete($label_map->{$to_be_remove});
+    my @candidates = glob($old_link . ',*');
+    # use the freed up old_link, because it is shorter 
+    if (scalar(@candidates)) {
+	my $candidate = $candidates[0];
+	my $link = readlink($candidate);
+	my $canon = substr($link, 6);
+	rename($candidate, $old_link);
+	$label_map->{$canon} = $old_link;
+    }
+}
+
 sub drop_all_with {
     my ($self, $label, @canons) = @_;
     my $label_map = $self->all_labeled_with($label);
@@ -103,8 +132,7 @@ sub drop_all_with {
 	die "cannot chdir: $!";
     foreach my $canon (@canons) {
 	next unless (exists($label_map->{$canon}));
-	unlink($label_map->{$canon}) or die "cannot unlink: $!";
-	delete($label_map->{$canon});
+	remove_link($canon, $label_map);
     }
     chdir($self->cwd);
     # empty label is dropped
@@ -120,11 +148,10 @@ sub add_all_with {
 	die "cannot chdir: $!";
     foreach my $canon (@canons) {
 	next if (exists($label_map->{$canon}));
-	my $l = rindex($canon, "/");
-	my $basename = ($l >= 0) ? substr($canon, $l + 1) : $canon;
-	symlink("../../" . $canon, $basename) or
+	my $link_name = get_link_name($canon);
+	symlink("../../" . $canon, $link_name) or
 	    die "cannot symlink: $!";
-	$label_map->{$canon} = $basename;
+	$label_map->{$canon} = $link_name;
     }
     chdir($self->cwd);
     return $self;
@@ -134,14 +161,13 @@ sub rename_with {
     my ($self, $label, $old, $new) = @_;
     my $label_map = $self->all_labeled_with($label);
     if (exists($label_map->{$old})) {
-	my $l = rindex($new, "/");
-	my $basename = ($l >= 0) ? substr($new, $l + 1) : $new;
 	chdir($self->root_dir . "/.labl/$label") or
 	    die "cannot chdir: $!";
-	unlink($label_map->{$old}) or die "cannot unlink: $!";
-	delete($label_map->{$old});
-	symlink("../../" . $new, $basename) or die "cannot symlink: $!";
-	$label_map->{$new} = $basename;
+	remove_link($old, $label_map);
+	my $link_name = get_link_name($new);
+	symlink("../../" . $new, $link_name) or
+	    die "cannot symlink: $!";
+	$label_map->{$new} = $link_name;
 	chdir($self->cwd);
     }
     return $self;
