@@ -34,19 +34,12 @@ sub do_list {
 
 sub do_show {
     my $labl = shift;
-    my @canons = map($labl->canon_of($_), @_);
-    my %name_map = map{ $_ => [] } @canons;
-    foreach my $label (@{$labl->all_labels}) {
-	foreach my $canon (@canons) {
-	    push @{$name_map{$canon}}, $label
-		if ($labl->is_labeled_with($label, $canon));
-	}
-    }
-    for (my $i = 0; $i < scalar(@_); $i++) {
-	my $canon = $canons[$i];
-	if (scalar(@{$name_map{$canon}})) {
-	    say $_[$i] . ":";
-	    say join(" ", @{$name_map{$canon}});
+    foreach  (@_) {
+	my $canon = $labl->canon_of($_);
+	my @labels = $labl->all_labels_of($canon);
+	if (scalar(@labels)) {
+	    say $_ . ":";
+	    say join(" ", @labels);
 	}
     }
 }

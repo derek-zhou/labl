@@ -4,37 +4,6 @@ use Cwd qw(getcwd abs_path);
 
 has ['root_dir', 'cwd', 'all_labels', '_label_map_cache'];
 
-sub add_label {
-    my ($self, $label) = @_;
-    my @all_labels = @{$self->all_labels};
-    my $labl_dir = $self->root_dir . "/.labl";
-    mkdir($labl_dir . "/" . $label) or
-	die "Can't mkdir $label: $!";
-    push @all_labels, $label;
-    $self->all_labels(\@all_labels);
-    return $self;
-}
-
-sub drop_label {
-    my ($self, $label) = @_;
-    my @all_labels = @{$self->all_labels};
-    my $labl_dir = $self->root_dir . "/.labl";
-    rmdir($labl_dir . "/" . $label) or
-	die "Can't rmdir $label: $!";
-    delete $self->_label_map_cache->{$label};
-    my @new_labels = grep { $_ ne $label } @all_labels;
-    $self->all_labels(\@new_labels);
-    return $self;
-}
-
-sub has_label {
-    my ($self, $label) = @_;
-    foreach (@{$self->all_labels}) {
-	return 1 if ($_ eq $label);
-    }
-    return 0;
-}
-
 sub init {
     my $self = shift;
     $self->cwd(getcwd());
@@ -65,14 +34,6 @@ sub init {
     return $self;
 }
 
-# return the canonical name
-sub canon_of {
-    my $self = shift;
-    # root_dir must be a prefix of the name
-    my $name = abs_path(shift);
-    return substr($name, length($self->root_dir)+1);
-}
-
 sub all_labeled_with {
     my ($self, $label) = @_;
     if (exists($self->_label_map_cache->{$label})) {
@@ -94,6 +55,45 @@ sub all_labeled_with {
     chdir($self->cwd);
     $self->_label_map_cache->{$label} = \%links;
     return \%links;
+}
+
+# return the canonical name
+sub canon_of {
+    my $self = shift;
+    # root_dir must be a prefix of the name
+    my $name = abs_path(shift);
+    return substr($name, length($self->root_dir)+1);
+}
+
+sub add_label {
+    my ($self, $label) = @_;
+    my @all_labels = @{$self->all_labels};
+    my $labl_dir = $self->root_dir . "/.labl";
+    mkdir($labl_dir . "/" . $label) or
+	die "Can't mkdir $label: $!";
+    push @all_labels, $label;
+    $self->all_labels(\@all_labels);
+    return $self;
+}
+
+sub drop_label {
+    my ($self, $label) = @_;
+    my @all_labels = @{$self->all_labels};
+    my $labl_dir = $self->root_dir . "/.labl";
+    rmdir($labl_dir . "/" . $label) or
+	die "Can't rmdir $label: $!";
+    delete $self->_label_map_cache->{$label};
+    my @new_labels = grep { $_ ne $label } @all_labels;
+    $self->all_labels(\@new_labels);
+    return $self;
+}
+
+sub has_label {
+    my ($self, $label) = @_;
+    foreach (@{$self->all_labels}) {
+	return 1 if ($_ eq $label);
+    }
+    return 0;
 }
 
 sub drop_all_with {
