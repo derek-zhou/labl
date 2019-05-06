@@ -99,12 +99,14 @@ sub has_label {
 sub drop_all_with {
     my ($self, $label, @canons) = @_;
     my $label_map = $self->all_labeled_with($label);
+    chdir($self->root_dir . "/.labl/$label") or
+	die "cannot chdir: $!";
     foreach my $canon (@canons) {
 	next unless (exists($label_map->{$canon}));
-	unlink($self->root_dir . "/.labl/$label/" . $label_map->{$canon}) or
-	    die "cannot unlink: $!";
+	unlink($label_map->{$canon}) or die "cannot unlink: $!";
 	delete($label_map->{$canon});
     }
+    chdir($self->cwd);
     # empty label is dropped
     $self->drop_label($label) unless(scalar(%{$label_map}));
     return $self;
