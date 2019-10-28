@@ -184,3 +184,63 @@ sub all_labels_of {
 }
 
 1;
+
+__END__
+
+=head1 NAME
+
+Labl - module to manage labels on files
+
+=head1 SYNOPSIS
+
+ use Labl;
+ # init the labl object with files from current working directory
+ my $labl = Labl->new->init;
+ # list all labels exist in any file for the current project
+ my @labels = @{$labl->all_labels};
+ # canonical the filename
+ my $canon = $labl->canon_of($filename);
+ # list all labels on one file
+ my @labels = $labl->all_labels_of($canon);
+ # add a label to a set of files
+ $labl->add_all_with($label, @canons);
+ # drop a label from a set of files
+ $labl->drop_all_with($label, @canons);
+ # test if a label is associated with one file
+ $labl->is_labeled_with($label, $canon);
+ # fix labels after a file has been renamed
+ $labl->rename_with($label, $oldname, $newname);
+
+=head1 DESCRIPTION
+
+A label is a short string to be associated with any file. Labl maintains
+the label database as organized symlinks in the .labl dir under the
+_project's root dir.
+
+=over 4
+
+=item B<init>
+
+Initialize the labl objects with information gathered from the current
+_project. A project is defined as a directory tree with a .labl in it,
+_or failing that, a directory tree with .git in it, in which case a
+_.labl dir will be created in the project root dir.
+
+  my $labl = Labl->new->init;
+
+=item B<canon_of($filename)>
+
+Canonlize the file name as a relative path from the project root, with
+_all symlink resolved. All file names passed to methods call to Labl
+_except this one have to be in the canon form.
+
+  my $canon = $labl->canon_of($filename);
+
+=back
+
+=head1 COPYRIGHT
+
+Copyright (C) 2019 Derek Zhou E<lt>derek@shannon-data.comE<gt>
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.

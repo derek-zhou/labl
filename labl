@@ -166,3 +166,65 @@ my $command = shift(@ARGV);
     }
     die "Unknown command: $command\n";
 }
+
+__END__
+
+=head1 NAME
+
+labl - tool to manage labels on files
+
+=head1 DESCRIPTION
+
+A label is a short string to be associated with any file. Labl maintains
+the label database as organized symlinks in the .labl dir under the
+_project's root dir. A project is defined as a directory tree with a
+_.labl in it, or failing that, a directory tree with .git in it, in
+_which case a .labl dir will be created in the project root dir.
+It has the following sub-commands:
+
+=over 4
+
+=item B<help>
+
+Print a short help message
+
+=item B<list>
+
+List all labels already exists in the project
+
+=item B<show> I<FILES>
+
+Show labels associated with each file
+
+=item B<rm> I<FILES>
+
+Remove the files and all label association for them
+
+=item B<mv> I<FILES> I<DEST/>
+
+Move all files to the directory DEST. DEST must have trailing /. Fix the label database.
+
+=item B<mv> I<SRC> I<DEST>
+
+Rename a file from SRC to DEST. Fix the label database.
+
+=item B<add> I<LABEL> I<FILES>
+
+Add LABEL to each file in FILES
+
+=item B<drop> I<LABEL> I<FILES>
+
+Drop LABEL from each file in FILES
+
+=item B<grep> I<LABEL> I<FILES>
+
+Filter FILES down to those associated with LABEL
+
+=back
+
+=head1 COPYRIGHT
+
+Copyright (C) 2019 Derek Zhou E<lt>derek@shannon-data.comE<gt>
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
