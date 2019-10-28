@@ -177,9 +177,9 @@ labl - tool to manage labels on files
 
 A label is a short string to be associated with any file. Labl maintains
 the label database as organized symlinks in the .labl dir under the
-_project's root dir. A project is defined as a directory tree with a
-_.labl in it, or failing that, a directory tree with .git in it, in
-_which case a .labl dir will be created in the project root dir.
+project's root dir. A project is defined as a directory tree with a
+.labl in it, or failing that, a directory tree with .git in it, in
+which case a .labl dir will be created in the project root dir.
 It has the following sub-commands:
 
 =over 4
@@ -221,6 +221,10 @@ Drop LABEL from each file in FILES
 Filter FILES down to those associated with LABEL
 
 =back
+
+=head1 SEE ALSO
+
+    L<App::Labl>
 
 =head1 COPYRIGHT
 

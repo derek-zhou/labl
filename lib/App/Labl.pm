@@ -217,24 +217,24 @@ App::Labl - module to manage labels on files
 
 A label is a short string to be associated with any file. Labl maintains
 the label database as organized symlinks in the .labl dir under the
-_project's root dir.
+project's root dir.
 
 =over 4
 
 =item B<init>
 
 Initialize the labl objects with information gathered from the current
-_project. A project is defined as a directory tree with a .labl in it,
-_or failing that, a directory tree with .git in it, in which case a
-_.labl dir will be created in the project root dir.
+project. A project is defined as a directory tree with a .labl in it,
+or failing that, a directory tree with .git in it, in which case a
+.labl dir will be created in the project root dir.
 
   my $labl = App::Labl->new->init;
 
 =item B<canon_of($filename)>
 
 Canonlize the file name as a relative path from the project root, with
-_all symlink resolved. All file names passed to methods call to Labl
-_except this one have to be in the canon form.
+all symlink resolved. All file names passed to methods call to Labl
+except this one have to be in the canon form.
 
   my $canon = $labl->canon_of($filename);
 
