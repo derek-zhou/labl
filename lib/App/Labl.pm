@@ -1,6 +1,8 @@
-package Labl;
+package App::Labl;
 use Mojo::Base -base;
 use Cwd qw(getcwd abs_path);
+
+our $VERSION = 0.01;
 
 has ['root_dir', 'cwd', 'all_labels', '_label_map_cache'];
 
@@ -189,13 +191,13 @@ __END__
 
 =head1 NAME
 
-Labl - module to manage labels on files
+App::Labl - module to manage labels on files
 
 =head1 SYNOPSIS
 
  use Labl;
  # init the labl object with files from current working directory
- my $labl = Labl->new->init;
+ my $labl = App::Labl->new->init;
  # list all labels exist in any file for the current project
  my @labels = @{$labl->all_labels};
  # canonical the filename
@@ -226,7 +228,7 @@ _project. A project is defined as a directory tree with a .labl in it,
 _or failing that, a directory tree with .git in it, in which case a
 _.labl dir will be created in the project root dir.
 
-  my $labl = Labl->new->init;
+  my $labl = App::Labl->new->init;
 
 =item B<canon_of($filename)>
 
