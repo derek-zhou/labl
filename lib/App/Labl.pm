@@ -135,6 +135,7 @@ sub drop_all_with {
     foreach my $canon (@canons) {
 	next unless (exists($label_map->{$canon}));
 	remove_link($canon, $label_map);
+	utime(undef, undef, "../../" . $canon);
     }
     chdir($self->cwd);
     # empty label is dropped
@@ -153,6 +154,7 @@ sub add_all_with {
 	my $link_name = get_link_name($canon);
 	symlink("../../" . $canon, $link_name) or
 	    die "cannot symlink: $!";
+	utime(undef, undef, "../../" . $canon);
 	$label_map->{$canon} = $link_name;
     }
     chdir($self->cwd);
