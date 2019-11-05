@@ -15,6 +15,7 @@ usage:
     Valid commands include:
     help                print this help text
     list                list all existing labels
+    fixup               fix dangling links and mtime
     show FILES          show labels associated with each file
     rm FILES            rm FILES, fix labels
     mv FILES DEST       mv FILES to DEST which must be a dir, fix labels
@@ -29,6 +30,15 @@ sub do_list {
     my $labl = shift;
     foreach (@{$labl->all_labels}) {
 	say $_;
+    }
+}
+
+sub do_fixup {
+    my $labl = shift;
+    # has to copy the array because fixup may mutate all_labels
+    my @labels = @{$labl->all_labels};
+    foreach (@labels) {
+	$labl->fixup($_);
     }
 }
 
@@ -127,6 +137,10 @@ my $command = shift(@ARGV);
 	do_list($labl);
 	last SWITCH;
     }
+    if ($command eq "fixup") {
+	do_fixup($labl);
+	last SWITCH;
+    }
     # the next 3 commands operate on files only
     if ($command eq "show") {
 	die "Usage: $0 $command files\n" if (scalar(@ARGV)<1);
@@ -191,6 +205,12 @@ Print a short help message
 =item B<list>
 
 List all labels already exists in the project
+
+=item B<fixup>
+
+Fixup the label database by:
+ * remove all dangling links
+ * make sure files has later mtime than links
 
 =item B<show> I<FILES>
 

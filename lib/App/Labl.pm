@@ -1,5 +1,6 @@
 package App::Labl;
 use Mojo::Base -base;
+use File::stat;
 use Cwd qw(getcwd abs_path);
 
 our $VERSION = 0.01;
@@ -57,6 +58,34 @@ sub all_labeled_with {
     chdir($self->cwd);
     $self->_label_map_cache->{$label} = \%links;
     return \%links;
+}
+
+sub fixup {
+    my ($self, $label) = @_;
+    my $label_map = $self->all_labeled_with($label);
+    chdir($self->root_dir . "/.labl/$label") or
+	die "cannot chdir: $!";
+    my @canons = keys(%{$label_map});
+    foreach my $canon (@canons) {
+	my $link = $label_map->{$canon};
+	my $lstat = lstat($link);
+	my $tstat = stat("../../" . $canon);
+	if ($tstat) {
+	    # fixup mtime
+	    if ($lstat->mtime > $tstat->mtime ) {
+		say STDERR "Warning: link $link in label $label has later mtime than canon $canon";
+		utime(time(), $lstat->mtime, "../../" . $canon);
+	    }
+	} else {
+	    # link target must exists
+	    say STDERR "Warning: link target of $link in label $label, supposedly to be $canon, does not exist";
+	    remove_link($canon, $label_map);
+	}
+    }
+    chdir($self->cwd);
+    # empty label is dropped
+    $self->drop_label($label) unless(scalar(%{$label_map}));
+    return $self;
 }
 
 # return the canonical name
@@ -206,6 +235,8 @@ App::Labl - module to manage labels on files
  my $canon = $labl->canon_of($filename);
  # list all labels on one file
  my @labels = $labl->all_labels_of($canon);
+ # fixup label database by removing dangle links and update mtime of link targets
+ $labl->fixup($label);
  # add a label to a set of files
  $labl->add_all_with($label, @canons);
  # drop a label from a set of files
