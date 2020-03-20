@@ -16,13 +16,14 @@ usage:
     help                print this help text
     list                list all existing labels
     fixup               fix dangling links and mtime
+    index               generate an (org formatted) index file that list all files with labels
     show FILES          show labels associated with each file
     rm FILES            rm FILES, fix labels
     mv FILES DEST       mv FILES to DEST which must be a dir, fix labels
     mv SRC DEST         rename SRC to DEST, fix labels
     add LABEL FILES     add LABEL to FILES
     drop LABEL FILES    drop LABEL from FILES
-    grep LABEL FILES    filter FILES down to those labeled with LABEL
+    grep LABEL FILES    filter FILES down to those labelled with LABEL
 EOT
 }
 
@@ -30,6 +31,38 @@ sub do_list {
     my $labl = shift;
     foreach (@{$labl->all_labels}) {
 	say $_;
+    }
+}
+
+sub enshure_header {
+    my $map = shift;
+    for (my $levels = 0; $levels < scalar(@_); $levels++) {
+	my $dir = join('/', @_[0..$levels]);
+	unless (exists($map->{$dir})) {
+	    print '*' x ($levels+1);
+	    print " $_[$levels]\n";
+	    $map->{$dir} = 1;
+	}
+    }
+}
+
+sub do_index {
+    my $labl = shift;
+    my @sorted = sort($labl->all_labelled);
+    my %index_header_map;
+    # turn the list of files to be a tree
+    foreach (@sorted) {
+	my @segments = split (/\//, $_);
+	my $levels = scalar(@segments);
+	enshure_header(\%index_header_map, @segments[0..$levels-2]) if ($levels > 1);
+	print '*' x $levels;
+	print " [[./$_]]\t";
+	my @tags = $labl->all_labels_of($_);
+	if (scalar(@tags) > 0) {
+	    my $tag_str = join(':', @tags);
+	    print ":$tag_str:";
+	}
+	print "\n";
     }
 }
 
@@ -120,7 +153,7 @@ sub do_grep {
     my $label = shift;
     my @canons = map($labl->canon_of($_), @_);
     for (my $i = 0; $i < scalar(@_); $i++) {
-	say $_[$i] if ($labl->is_labeled_with($label, $canons[$i]));
+	say $_[$i] if ($labl->is_labelled_with($label, $canons[$i]));
     }
 }
 
@@ -139,6 +172,10 @@ my $command = shift(@ARGV);
     }
     if ($command eq "fixup") {
 	do_fixup($labl);
+	last SWITCH;
+    }
+    if ($command eq "index") {
+	do_index($labl);
 	last SWITCH;
     }
     # the next 3 commands operate on files only

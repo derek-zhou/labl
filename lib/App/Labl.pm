@@ -37,7 +37,19 @@ sub init {
     return $self;
 }
 
-sub all_labeled_with {
+sub all_labelled {
+    my $self = shift;
+    my %file_map;
+    foreach (@{$self->all_labels}) {
+	my $this_map = $self->all_labelled_with($_);
+	foreach (keys(%{$this_map})) {
+	    $file_map{$_} = 1;
+	}
+    }
+    return keys(%file_map);
+}
+
+sub all_labelled_with {
     my ($self, $label) = @_;
     if (exists($self->_label_map_cache->{$label})) {
 	return $self->_label_map_cache->{$label};
@@ -62,7 +74,7 @@ sub all_labeled_with {
 
 sub fixup {
     my ($self, $label) = @_;
-    my $label_map = $self->all_labeled_with($label);
+    my $label_map = $self->all_labelled_with($label);
     chdir($self->root_dir . "/.labl/$label") or
 	die "cannot chdir: $!";
     my @canons = keys(%{$label_map});
@@ -158,7 +170,7 @@ sub remove_link {
 
 sub drop_all_with {
     my ($self, $label, @canons) = @_;
-    my $label_map = $self->all_labeled_with($label);
+    my $label_map = $self->all_labelled_with($label);
     chdir($self->root_dir . "/.labl/$label") or
 	die "cannot chdir: $!";
     foreach my $canon (@canons) {
@@ -175,7 +187,7 @@ sub drop_all_with {
 sub add_all_with {
     my ($self, $label, @canons) = @_;
     $self->add_label($label) unless ($self->has_label($label));
-    my $label_map = $self->all_labeled_with($label);
+    my $label_map = $self->all_labelled_with($label);
     chdir($self->root_dir . "/.labl/$label") or
 	die "cannot chdir: $!";
     foreach my $canon (@canons) {
@@ -192,7 +204,7 @@ sub add_all_with {
 
 sub rename_with {
     my ($self, $label, $old, $new) = @_;
-    my $label_map = $self->all_labeled_with($label);
+    my $label_map = $self->all_labelled_with($label);
     if (exists($label_map->{$old})) {
 	chdir($self->root_dir . "/.labl/$label") or
 	    die "cannot chdir: $!";
@@ -206,14 +218,14 @@ sub rename_with {
     return $self;
 }
 
-sub is_labeled_with {
+sub is_labelled_with {
     my ($self, $label, $file) = @_;
-    return exists($self->all_labeled_with($label)->{$file});
+    return exists($self->all_labelled_with($label)->{$file});
 }
 
 sub all_labels_of {
     my ($self, $file) = @_;
-    return grep {exists($self->all_labeled_with($_)->{$file})} @{$self->all_labels};
+    return grep {exists($self->all_labelled_with($_)->{$file})} @{$self->all_labels};
 }
 
 1;
@@ -231,6 +243,8 @@ App::Labl - module to manage labels on files
  my $labl = App::Labl->new->init;
  # list all labels exist in any file for the current project
  my @labels = @{$labl->all_labels};
+ # list all labelled files for the current project
+ my @labels = @{$labl->all_labelled};
  # canonical the filename
  my $canon = $labl->canon_of($filename);
  # list all labels on one file
@@ -242,7 +256,7 @@ App::Labl - module to manage labels on files
  # drop a label from a set of files
  $labl->drop_all_with($label, @canons);
  # test if a label is associated with one file
- $labl->is_labeled_with($label, $canon);
+ $labl->is_labelled_with($label, $canon);
  # fix labels after a file has been renamed
  $labl->rename_with($label, $oldname, $newname);
 
