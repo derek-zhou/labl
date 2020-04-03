@@ -16,8 +16,10 @@ usage:
     help                print this help text
     list                list all existing labels
     fixup               fix dangling links and mtime
-    index               generate an (org formatted) index file that list all files with labels
+    export              export an (org formatted) index file that list all files with labels
+    import              import an (org formatted) index file that list all files with labels
     show FILES          show labels associated with each file
+    pick FILE           interactively add/remove labels for the given file from the existing pool of labels
     rm FILES            rm FILES, fix labels
     mv FILES DEST       mv FILES to DEST which must be a dir, fix labels
     mv SRC DEST         rename SRC to DEST, fix labels
@@ -46,7 +48,7 @@ sub enshure_header {
     }
 }
 
-sub do_index {
+sub do_export {
     my $labl = shift;
     my @sorted = sort($labl->all_labelled);
     my %index_header_map;
@@ -64,6 +66,35 @@ sub do_index {
 	}
 	print "\n";
     }
+}
+
+sub do_import {
+    my $labl = shift;
+    while (<>) {
+	if ($_ =~ /^\**\s+\[\[([^\]]+)\]\]\s+(\S*)$/) {
+	    my $file = $1;
+	    my @labels = split(/:/, $2);
+	    assign_labels($labl, $file, @labels);
+	}
+    }
+}
+
+sub assign_labels {
+    my $labl = shift;
+    my $canon = $labl->canon_of(shift);
+    my @labels = $labl->all_labels_of($canon);
+    my %label_map;
+    foreach (@labels) {
+	$label_map{$_} = 0;
+    }
+    foreach (@_) {
+	next unless($_);
+	$label_map{$_} = 1 if (exists($label_map{$_}));
+	$labl->add_all_with($_, $canon) unless(exists($label_map{$_}));
+    }
+    foreach (@labels) {
+	$labl->drop_all_with($_, $canon) if ($label_map{$_} == 0);
+    }    
 }
 
 sub do_fixup {
@@ -85,6 +116,53 @@ sub do_show {
 	    say join(" ", @labels);
 	}
     }
+}
+
+sub digit_value {
+    my $char = shift;
+    return ord($char) - ord ('0') if (($char ge '0') && ($char le '9'));
+    return 10 + ord($char) - ord ('a') if (($char ge 'a') && ($char le 'z'));
+    die "Out of bound for char $char";
+}
+
+sub do_pick {
+    my $labl = shift;
+    my $canon = $labl->canon_of(shift);
+    my @current_labels = $labl->all_labels_of($canon);
+    my %label_map;
+    foreach (@current_labels) {
+	$label_map{$_} = 1;
+    }
+    my @labels = sort(@{$labl->all_labels});
+    die "Too many labels to pick from" if (scalar(@labels) > 36);
+    my $i = 0;
+    foreach (@labels) {
+	my $k = chr($i > 9 ? $i - 10 + ord('a') : $i + ord('0'));
+	if (exists($label_map{$_})) {
+	    print "$k:*$_ ";
+	} else {
+	    print "$k:$_ ";
+	}
+	$i ++;
+    }
+    say "\nEnter eg: +123-456 to change labels";
+    print "> ";
+    my $inst = <STDIN>;
+    chomp $inst;
+    my $state = 0; # 0: init 1: add 2: remove
+    foreach(split(//, $inst)) {
+	my $token = $_;
+	if ($token eq '+') {
+	    $state = 1;
+	} elsif ($token eq '-') {
+	    $state = 2;
+	} else {
+	    die "Syntax error of instruction: $inst" if ($state == 0);
+	    $labl->add_all_with($labels[digit_value($token)], $canon) if ($state == 1);
+	    $labl->drop_all_with($labels[digit_value($token)], $canon) if ($state == 2);
+	}
+    }
+    do_show($labl, $canon);
 }
 
 sub do_rm {
@@ -174,14 +252,23 @@ my $command = shift(@ARGV);
 	do_fixup($labl);
 	last SWITCH;
     }
-    if ($command eq "index") {
-	do_index($labl);
+    if ($command eq "export") {
+	do_export($labl);
+	last SWITCH;
+    }
+    if ($command eq "import") {
+	do_import($labl);
 	last SWITCH;
     }
     # the next 3 commands operate on files only
     if ($command eq "show") {
 	die "Usage: $0 $command files\n" if (scalar(@ARGV)<1);
 	do_show($labl, @ARGV);
+	last SWITCH;
+    }
+    if ($command eq "pick") {
+	die "Usage: $0 $command file\n" unless (scalar(@ARGV)==1);
+	do_pick($labl, @ARGV);
 	last SWITCH;
     }
     if ($command eq "rm") {
@@ -249,9 +336,21 @@ Fixup the label database by:
  * remove all dangling links
  * make sure files has later mtime than links
 
+=item B<export>
+
+Export an org formatted index file that list all files with labels
+
+=item B<import>
+
+Import an org formatted index file that list all files with labels. original labl database is discarded
+
 =item B<show> I<FILES>
 
 Show labels associated with each file
+
+=item B<pick> I<FILE>
+
+Interactively add/remove labels for the given file from the existing pool of labels
 
 =item B<rm> I<FILES>
 
