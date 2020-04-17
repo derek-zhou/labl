@@ -289,7 +289,7 @@ except this one have to be in the canon form.
 
 =head1 COPYRIGHT
 
-Copyright (C) 2019 Derek Zhou E<lt>derek@shannon-data.comE<gt>
+Copyright (C) 2019 Derek Zhou E<lt>derek@3qin.usE<gt>
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
