@@ -22,17 +22,25 @@ labl will auto create this dir if it detects a .git dir at the same lavel. All l
 
 labl accepts several sub-commands, such as add/drop/grep etc, fairly straight forward, please check the manpages for details. A few sub-commands that are not so straight forward and worth mentioning here:
 
-### labl pick ###
+ * labl pick
 
 Show the list of existing labels in this project and let you pick interactively. You can add and drop multiple labels on a file in one go.
 
-### labl export ###
+ * labl export
 
 Export to a flat file, in emacs's org format, about all labl's internal data. If you have emacs and understand org file's syntax, you can easily figure out what is going on inside labl.
 
-### labl import ###
+ * labl import
 
 The reverse of an export. Take the flat org file and replace all labl's internal data, stored in the .labl dir as dirs and symlinks.
+
+## Notes ##
+
+A few more thing worth talking about.
+
+### Order of labels ###
+
+An important and usful fact is that labels are orfered by the order you add the label to a file. You can for example use the first label as the primary label, and the rest as secondary. How you use it is completely up to you. 
 
 ## mtime of a file ##
 

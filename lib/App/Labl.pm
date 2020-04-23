@@ -2,10 +2,11 @@ package App::Labl;
 use Mojo::Base -base;
 use File::stat;
 use Cwd qw(getcwd abs_path);
+use File::Path qw(remove_tree);
 
 our $VERSION = 0.01;
 
-has ['root_dir', 'cwd', 'all_labels', '_label_map_cache'];
+has ['root_dir', 'cwd', '_label_map_cache', '_sequence_number'];
 
 sub init {
     my $self = shift;
@@ -28,19 +29,59 @@ sub init {
     chdir($self->cwd);
     die "Cannot find project root dir" unless ($found_dir);
     $self->root_dir($found_dir);
-    $self->_label_map_cache({});
-    opendir(my $dh, ($found_dir . "/.labl")) or
-	die "Can't open label dir: $!";
-    my @labels = grep(!/^\./, readdir($dh));
-    closedir $dh;
-    $self->all_labels(\@labels);
+    $self->_load;
     return $self;
+}
+
+sub clearAll {
+    my $self = shift;
+    $self->_label_map_cache({});
+    $self->_sequence_number(0);
+    remove_tree( $self->root_dir . '/.labl', {keep_root => 1} );
+}
+
+sub _load {
+    my $self = shift;
+    my %label_map;
+    my $max_number = 0;
+    my @labels;
+    opendir(my $dh, ($self->root_dir . "/.labl")) or
+	die "Can't open label dir: $!";
+    @labels = grep(!/^\./, readdir($dh));
+    closedir $dh;
+    foreach my $label (@labels) {
+	my %links;
+	chdir($self->root_dir . "/.labl/$label") or
+	    die "cannot chdir: $!";
+	opendir(my $dh, ".") or die "Can't open label $label: $!";
+	foreach (readdir($dh)) {
+	    unless (/^\./) {
+		my $link = readlink($_);
+		defined($link) or die "readlink $_ in $label fail: $!";
+		# all links start with "../../"
+		$links{substr($link, 6)} = $_;
+		if (/^\d+$/) {
+		    $max_number = $_ if ($max_number >= 0 && $_ > $max_number);
+		} else {
+		    if ($max_number >= 0) {
+			say STDERR "Warning: data from older version of labl detected. Read only access from now";
+			$max_number = -1;
+		    }
+		}
+	    }
+	}
+	closedir $dh;
+	$label_map{$label} = \%links;
+    }
+    chdir($self->cwd);
+    $self->_label_map_cache(\%label_map);
+    $self->_sequence_number($max_number);
 }
 
 sub all_labelled {
     my $self = shift;
     my %file_map;
-    foreach (@{$self->all_labels}) {
+    foreach ($self->all_labels) {
 	my $this_map = $self->all_labelled_with($_);
 	foreach (keys(%{$this_map})) {
 	    $file_map{$_} = 1;
@@ -51,25 +92,8 @@ sub all_labelled {
 
 sub all_labelled_with {
     my ($self, $label) = @_;
-    if (exists($self->_label_map_cache->{$label})) {
-	return $self->_label_map_cache->{$label};
-    }
-    my %links;
-    chdir($self->root_dir . "/.labl/$label") or
-	die "cannot chdir: $!";
-    opendir(my $dh, ".") or die "Can't open label $label: $!";
-    foreach (readdir($dh)) {
-	unless (/^\./) {
-	    my $link = readlink($_);
-	    defined($link) or die "readlink $_ in $label fail: $!";
-	    # all links start with "../../"
-	    $links{substr($link, 6)} = $_;
-	}
-    }
-    closedir $dh;
-    chdir($self->cwd);
-    $self->_label_map_cache->{$label} = \%links;
-    return \%links;
+    return $self->_label_map_cache->{$label} if ($self->has_label($label));
+    die "No such label $label!";
 }
 
 sub fixup {
@@ -110,46 +134,37 @@ sub canon_of {
 
 sub add_label {
     my ($self, $label) = @_;
-    my @all_labels = @{$self->all_labels};
     my $labl_dir = $self->root_dir . "/.labl";
     mkdir($labl_dir . "/" . $label) or
 	die "Can't mkdir $label: $!";
-    push @all_labels, $label;
-    $self->all_labels(\@all_labels);
+    $self->_label_map_cache->{$label} = {};
     return $self;
 }
 
 sub drop_label {
     my ($self, $label) = @_;
-    my @all_labels = @{$self->all_labels};
     my $labl_dir = $self->root_dir . "/.labl";
     rmdir($labl_dir . "/" . $label) or
 	die "Can't rmdir $label: $!";
     delete $self->_label_map_cache->{$label};
-    my @new_labels = grep { $_ ne $label } @all_labels;
-    $self->all_labels(\@new_labels);
     return $self;
 }
 
 sub has_label {
     my ($self, $label) = @_;
-    foreach (@{$self->all_labels}) {
-	return 1 if ($_ eq $label);
-    }
-    return 0;
+    return (exists($self->_label_map_cache->{$label}));
+}
+
+sub read_only {
+    my $self = shift;
+    return $self->_sequence_number < 0;
 }
 
 sub get_link_name {
-    my $canon = shift;
-    my @tokens = reverse(split(/\//, $canon));
-    my $name = $tokens[0];
-    my $i = 1;
-    while (-e $name) {
-	die "The $canon cannot be linked!" if ($i == scalar(@tokens));
-	$name = $name . ',' . $tokens[$i];
-	$i++;
-    }
-    return $name;
+    my $self = shift;
+    die "Read only access, aborted" if ($self->read_only);
+    $self->_sequence_number($self->_sequence_number + 1);
+    return $self->_sequence_number;
 }
 
 sub remove_link {
@@ -192,7 +207,7 @@ sub add_all_with {
 	die "cannot chdir: $!";
     foreach my $canon (@canons) {
 	next if (exists($label_map->{$canon}));
-	my $link_name = get_link_name($canon);
+	my $link_name = $self->get_link_name;
 	symlink("../../" . $canon, $link_name) or
 	    die "cannot symlink: $!";
 	utime(undef, undef, "../../" . $canon);
@@ -209,9 +224,10 @@ sub rename_with {
 	chdir($self->root_dir . "/.labl/$label") or
 	    die "cannot chdir: $!";
 	remove_link($old, $label_map);
-	my $link_name = get_link_name($new);
+	my $link_name = $self->get_link_name;
 	symlink("../../" . $new, $link_name) or
 	    die "cannot symlink: $!";
+	utime(undef, undef, "../../" . $new);
 	$label_map->{$new} = $link_name;
 	chdir($self->cwd);
     }
@@ -223,9 +239,20 @@ sub is_labelled_with {
     return exists($self->all_labelled_with($label)->{$file});
 }
 
+sub all_labels {
+    my $self = shift;
+    return keys %{$self->_label_map_cache};
+}
+
 sub all_labels_of {
     my ($self, $file) = @_;
-    return grep {exists($self->all_labelled_with($_)->{$file})} @{$self->all_labels};
+    my %map;
+    foreach ($self->all_labels) {
+	$map{$_} = $self->all_labelled_with($_)->{$file} if
+	    (exists($self->all_labelled_with($_)->{$file}));
+    }
+    return keys %map if ($self->read_only);
+    return sort {$map{$a} <=> $map{$b}} keys %map;
 }
 
 1;
@@ -241,10 +268,12 @@ App::Labl - module to manage labels on files
  use Labl;
  # init the labl object with files from current working directory
  my $labl = App::Labl->new->init;
+ # clear all label data
+ $labl->clearAll;
  # list all labels exist in any file for the current project
- my @labels = @{$labl->all_labels};
+ my @labels = $labl->all_labels;
  # list all labelled files for the current project
- my @labels = @{$labl->all_labelled};
+ my @canons = $labl->all_labelled;
  # canonical the filename
  my $canon = $labl->canon_of($filename);
  # list all labels on one file
@@ -289,7 +318,7 @@ except this one have to be in the canon form.
 
 =head1 COPYRIGHT
 
-Copyright (C) 2019 Derek Zhou E<lt>derek@3qin.usE<gt>
+Copyright (C) 2020 Derek Zhou E<lt>derek@3qin.usE<gt>
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

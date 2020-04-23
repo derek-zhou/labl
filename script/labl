@@ -31,7 +31,7 @@ EOT
 
 sub do_list {
     my $labl = shift;
-    foreach (@{$labl->all_labels}) {
+    foreach ($labl->all_labels) {
 	say $_;
     }
 }
@@ -70,6 +70,7 @@ sub do_export {
 
 sub do_import {
     my $labl = shift;
+    $labl->clearAll;
     while (<>) {
 	if ($_ =~ /^\**\s+\[\[([^\]]+)\]\]\s+(\S*)$/) {
 	    my $file = $1;
@@ -82,26 +83,15 @@ sub do_import {
 sub assign_labels {
     my $labl = shift;
     my $canon = $labl->canon_of(shift);
-    my @labels = $labl->all_labels_of($canon);
-    my %label_map;
-    foreach (@labels) {
-	$label_map{$_} = 0;
-    }
     foreach (@_) {
-	next unless($_);
-	$label_map{$_} = 1 if (exists($label_map{$_}));
-	$labl->add_all_with($_, $canon) unless(exists($label_map{$_}));
+	next unless ($_);
+	$labl->add_all_with($_, $canon);
     }
-    foreach (@labels) {
-	$labl->drop_all_with($_, $canon) if ($label_map{$_} == 0);
-    }    
 }
 
 sub do_fixup {
     my $labl = shift;
-    # has to copy the array because fixup may mutate all_labels
-    my @labels = @{$labl->all_labels};
-    foreach (@labels) {
+    foreach ($labl->all_labels) {
 	$labl->fixup($_);
     }
 }
@@ -128,21 +118,13 @@ sub digit_value {
 sub do_pick {
     my $labl = shift;
     my $canon = $labl->canon_of(shift);
-    my @current_labels = $labl->all_labels_of($canon);
-    my %label_map;
-    foreach (@current_labels) {
-	$label_map{$_} = 1;
-    }
-    my @labels = sort(@{$labl->all_labels});
+    do_show($labl, $canon);
+    my @labels = sort($labl->all_labels);
     die "Too many labels to pick from" if (scalar(@labels) > 36);
     my $i = 0;
     foreach (@labels) {
 	my $k = chr($i > 9 ? $i - 10 + ord('a') : $i + ord('0'));
-	if (exists($label_map{$_})) {
-	    print "$k:*$_ ";
-	} else {
-	    print "$k:$_ ";
-	}
+	print "$k:$_ ";
 	$i ++;
     }
     say "\nEnter eg: +123-456 to change labels";
@@ -168,8 +150,7 @@ sub do_pick {
 sub do_rm {
     my $labl = shift;
     my @canons = map($labl->canon_of($_), @_);
-    my @labels = @{$labl->all_labels};
-    foreach my $label (@labels) {
+    foreach my $label ($labl->all_labels) {
 	$labl->drop_all_with($label, @canons);
     }
     foreach (@_) {
@@ -205,7 +186,7 @@ sub do_real_mv {
 	    die "cannot rename: $!";
     }
     my @canons = keys(%canon_mv_map);
-    foreach my $label (@{$labl->all_labels}) {
+    foreach my $label ($labl->all_labels) {
 	foreach my $canon (@canons) {
 	    $labl->rename_with($label, $canon, $canon_mv_map{$canon});
 	}
